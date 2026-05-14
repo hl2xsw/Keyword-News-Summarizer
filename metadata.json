@@ -1,0 +1,6 @@
+{
+  "name": "Keyword News Summarizer",
+  "description": "Search for news by keywords, get AI-powered summaries, and view history from the last 3 days.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

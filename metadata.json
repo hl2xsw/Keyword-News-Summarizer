@@ -1,6 +1,8 @@
 {
-  "name": "Keyword News Summarizer",
-  "description": "Search for news by keywords, get AI-powered summaries, and view history from the last 3 days.",
+  "name": "AI 뉴스 리서치",
+  "description": "실시간 구글 검색을 활용한 최신 뉴스 분석 및 요약 대시보드",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

@@ -1,73 +1,46 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
-@import "tailwindcss";
-
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Outfit", sans-serif;
-  --font-serif: "Playfair Display", serif;
-  
-  --color-brand-bg: #f8fafc;
-  --color-brand-card: #ffffff;
-  --color-brand-accent: #b48a01;
-  --color-brand-text: #0f172a;
-  --color-brand-muted: #64748b;
-  --color-brand-border: #e2e8f0;
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @layer base {
+  :root {
+    --brand-primary: #000000;
+    --brand-secondary: #64748b;
+    --brand-accent: #2563eb;
+    --bg-main: #ffffff;
+  }
+
   body {
-    @apply bg-brand-bg text-brand-text antialiased;
+    @apply font-sans antialiased bg-[#f8fafc] text-slate-900;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 }
 
-@utility gold-glow {
-  box-shadow: 0 0 15px rgba(212, 175, 55, 0.1);
+@layer components {
+  .btn-primary {
+    @apply px-6 py-3 bg-black text-white rounded-lg font-semibold transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50;
+  }
+  
+  .card-swiss {
+    @apply bg-white border border-slate-200 rounded-xl overflow-hidden transition-all hover:border-slate-400 hover:shadow-xl;
+  }
+
+  .input-swiss {
+    @apply w-full px-5 py-4 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all;
+  }
 }
 
-@utility glass {
-  @apply bg-white/60 backdrop-blur-md border border-slate-200;
+/* Custom scrollbar for a cleaner look */
+::-webkit-scrollbar {
+  width: 8px;
 }
 
-@utility card-border {
-  @apply border border-slate-100;
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
 }
 
-.news-card {
-  @apply bg-white p-8 rounded-xl shadow-sm border border-slate-100 transition-all duration-300 hover:shadow-md;
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full hover:bg-slate-300;
 }
 
-.news-card-date {
-  @apply text-sm text-slate-400 font-medium mb-2 block;
-}
-
-.news-card-title {
-  @apply text-xl font-bold text-slate-900 leading-snug mb-3 hover:text-brand-accent transition-colors cursor-pointer;
-}
-
-.news-card-snippet {
-  @apply text-slate-600 leading-relaxed text-sm line-clamp-3 mb-4;
-}
-
-.news-card-source {
-  @apply flex items-center justify-end gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider;
-}
-
-.btn-primary {
-  @apply bg-brand-accent text-white px-6 py-2.5 rounded-sm font-bold uppercase tracking-widest text-[10px] transition-all hover:brightness-110 active:scale-95 disabled:opacity-30;
-}
-
-.btn-secondary {
-  @apply border border-slate-200 text-brand-text px-4 py-2 rounded-sm font-bold uppercase tracking-widest text-[10px] transition-all hover:border-brand-accent hover:text-brand-accent;
-}
-
-.input-field {
-  @apply w-full bg-white border border-slate-200 rounded-sm px-4 py-3 text-sm focus:outline-none focus:border-brand-accent transition-all placeholder:text-slate-300;
-}
-
-.sidebar-item {
-  @apply p-4 border-l-2 border-transparent cursor-pointer transition-all hover:bg-slate-50;
-}
-
-.sidebar-item-active {
-  @apply bg-slate-100 border-brand-accent;
-}

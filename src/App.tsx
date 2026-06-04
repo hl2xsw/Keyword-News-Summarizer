@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Loader2, Newspaper, ExternalLink, Sparkles, RefreshCw, LayoutGrid, List, Info, ArrowUpRight, Zap, X } from 'lucide-react';
+import { Search, Loader2, Newspaper, ExternalLink, Sparkles, RefreshCw, LayoutGrid, List, Info, ArrowUpRight, Zap, X, Settings, Eye, EyeOff, Save, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { searchNews, briefNews } from './services/news';
 import { Article } from './types';
@@ -25,6 +25,14 @@ export default function App() {
   const [selectedArticleIndex, setSelectedArticleIndex] = useState<number | null>(null);
   const [briefing, setBriefing] = useState<string>('');
   const [briefingLoading, setBriefingLoading] = useState<boolean>(false);
+
+  // System Custom Settings States
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem("GOOGLE_API_KEY") || '') : '');
+  const [cseIdInput, setCseIdInput] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem("GOOGLE_CSE_ID") || '') : '');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [hasSavedKeys, setHasSavedKeys] = useState(() => typeof window !== 'undefined' ? !!(localStorage.getItem("GOOGLE_API_KEY") && localStorage.getItem("GOOGLE_CSE_ID")) : false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const searchController = React.useRef<AbortController | null>(null);
 
@@ -108,6 +116,33 @@ export default function App() {
     }
   }, []);
 
+  const handleSaveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (apiKeyInput.trim() && cseIdInput.trim()) {
+      localStorage.setItem("GOOGLE_API_KEY", apiKeyInput.trim());
+      localStorage.setItem("GOOGLE_CSE_ID", cseIdInput.trim());
+      setHasSavedKeys(true);
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+        setShowSettings(false);
+        handleSearch(keyword || '오늘의 주요 뉴스');
+      }, 1000);
+    } else {
+      alert("구글 API Key와 커스텀 검색엔진 ID를 모두 올바르게 입력해 주세요.");
+    }
+  };
+
+  const handleClearSettings = () => {
+    localStorage.removeItem("GOOGLE_API_KEY");
+    localStorage.removeItem("GOOGLE_CSE_ID");
+    setApiKeyInput('');
+    setCseIdInput('');
+    setHasSavedKeys(false);
+    setShowSettings(false);
+    handleSearch(keyword || '오늘의 주요 뉴스');
+  };
+
   // Initial load
   useEffect(() => {
     handleSearch('오늘의 주요 뉴스');
@@ -142,6 +177,15 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
+             <button
+               onClick={() => setShowSettings(true)}
+               className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-50 hover:bg-black hover:text-white rounded-xl text-[10px] font-black tracking-wider uppercase transition-all duration-300 border border-slate-200 cursor-pointer"
+               title="System Settings Integration"
+             >
+               <Settings size={13} className={hasSavedKeys ? "text-blue-500 animate-spin" : "text-slate-500"} style={{ animationDuration: '6s' }} />
+               <span>Settings</span>
+               {hasSavedKeys && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+             </button>
              <div className="h-4 w-px bg-slate-200 hidden sm:block" />
              <span className="text-[10px] font-bold text-slate-400 tabular-nums hidden sm:block">
                v3.5.0_LIVE_UPGRADE
@@ -305,6 +349,10 @@ export default function App() {
                     현재 구글 외부 실시간 라이브 뉴스 검색 API의 호출 허용량(Quota)이 일시적으로 제한선에 다다랐습니다. 
                     저희 <strong>Dispatch Pro</strong>는 사용자분들께 혼란을 주거나 사실과 어긋난 <strong>AI 임의 합성 뉴스(인물/사건 가짜 작문)를 수작업하거나 노출하는 것을 완벽히 전면 차단</strong>하고 있습니다. 
                     오직 검증되고 구글 검색망에 실재하는 100% 진짜 뉴스 스트림 신호만 정직하게 중개하고 있으니, 잠시 후 상단의 <strong>Intercept</strong> 버튼을 눌러 다시 수색해 주시기 바랍니다.
+                    <br />
+                    <span className="mt-3 block text-[10.5px] text-amber-800/80 leading-relaxed font-semibold bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                      💡 <strong>실시간 검색 안정화 기술 팁:</strong> 보다 완벽하고 지속적인 쿼터 독립을 원하시면, 구글 공식 <strong>Programmable Search Engine (커스텀 검색) API</strong>의 <code>GOOGLE_API_KEY</code> 및 <code>GOOGLE_CSE_ID</code>를 서버 환경 변수(Secrets)에 등록해 보세요. 등록 즉시 개별 맞춤 전용 검색망이 가동되어 트래픽 제한 없이 실시간 정보를 즉시 탐색할 수 있습니다.
+                    </span>
                   </p>
                 </div>
               </div>
@@ -481,10 +529,16 @@ export default function App() {
               <Zap className="animate-pulse" size={40} />
             </div>
             <h3 className="text-3xl font-black text-amber-800 tracking-tighter uppercase italic mb-4">Uplink Quota Exceeded</h3>
-            <p className="text-slate-500 text-sm font-medium max-w-lg mx-auto leading-relaxed mb-10">
+            <p className="text-slate-500 text-sm font-medium max-w-xl mx-auto leading-relaxed mb-10">
               구글 실시간 뉴스 검색 API의 트래픽 트래커 호출량 한계로 정보 수색 대기 상태입니다.<br />
-              Dispatch Pro는 조작 또는 <strong>AI 가상 작문(가짜 생태 기사)을 영구 배제</strong>하기에, 검색이 복구될 때까지 
+              Dispatch Pro는 외부 무작위 조작 또는 <strong>AI 가상 작문(가짜 생태 기사)을 영구 배제</strong>하기에, 검색이 복구될 때까지 
               임의 합성 결과를 내지 않고 정직한 수집 대기 방식을 채택합니다. 잠시 후 상단 새로고침 혹은 검색을 이용해 주세요.
+              <br />
+              <span className="mt-4 block text-xs text-amber-800/80 leading-relaxed font-semibold bg-amber-500/5 p-4 rounded-2xl border border-amber-500/10 text-left">
+                💡 <strong>안정화 팁 (트래픽 할당량 영구 해결):</strong><br />
+                구글의 공식 <strong>Programmable Search Engine</strong>을 연결하면, 트래픽 한도로부터 완전히 자유로운 단독 뉴스 탐색 채널을 구축하실 수 있습니다. 
+                메뉴 <strong>Settings &gt; Secrets</strong>에 <code>GOOGLE_API_KEY</code>와 <code>GOOGLE_CSE_ID</code>를 등록하시면, 즉시 대기 없는 초고속 실시간 수색이 완벽히 가동됩니다.
+              </span>
             </p>
             <button 
               onClick={() => handleSearch(keyword || '오늘의 주요 뉴스')}
@@ -594,6 +648,188 @@ export default function App() {
                   닫기
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Settings Drawer Overlay */}
+      <AnimatePresence>
+        {showSettings && (
+          <div className="fixed inset-0 z-[100] flex justify-end">
+            {/* Dark blur backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { if (!saveSuccess) setShowSettings(false); }}
+              className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm cursor-pointer"
+            />
+            
+            {/* Sliding Panel */}
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "105%" }}
+              transition={{ type: "spring", damping: 26, stiffness: 190 }}
+              className="relative w-full max-w-lg h-full bg-white shadow-2xl flex flex-col z-10 border-l border-slate-100"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 bg-black text-white rounded-lg">
+                    <Settings size={16} />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">
+                      System Configuration
+                    </h3>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                      Search API & credentials integration
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(false)}
+                  disabled={saveSuccess}
+                  className="p-2 hover:bg-slate-200 rounded-xl transition-all text-slate-400 hover:text-black cursor-pointer"
+                  title="Close Settings"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Scrollable Form Content */}
+              <form onSubmit={handleSaveSettings} className="flex-1 overflow-y-auto px-8 py-10 space-y-8 flex flex-col">
+                <div className="space-y-2">
+                  <h4 className="text-xl font-black text-slate-900 tracking-tight">
+                    API 연동 제어판
+                  </h4>
+                  <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                    구글 공식 <strong>Programmable Search Engine</strong>을 개별 연동하여, 네트워크 지연 및 Quota(검색 할당량) 초과 제약이 없는 독자적인 전용 실시간 수색 채널을 구성합니다.
+                  </p>
+                </div>
+
+                {hasSavedKeys && (
+                  <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 flex gap-3 items-center">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse flex-shrink-0" />
+                    <p className="text-xs font-bold text-blue-800 leading-none">
+                      현재 사용자의 커스텀 검색엔진 설정이 활성화되어 작동 중입니다.
+                    </p>
+                  </div>
+                )}
+
+                {/* API KEY Input Field */}
+                <div className="space-y-3">
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    GOOGLE_API_KEY
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                      placeholder="AIzaSy..."
+                      required
+                      className="w-full px-5 py-4 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-100 focus:border-black rounded-xl text-sm font-semibold transition-all pr-12 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
+                    Google Cloud Console에서 <strong>Custom Search API</strong>를 활성화한 프로젝트의 유효한 API Key를 입력하세요.
+                  </p>
+                </div>
+
+                {/* CSE ID Input Field */}
+                <div className="space-y-3">
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    GOOGLE_CSE_ID
+                  </label>
+                  <input
+                    type="text"
+                    value={cseIdInput}
+                    onChange={(e) => setCseIdInput(e.target.value)}
+                    placeholder="예: 5eab5a5eefcfa498a"
+                    required
+                    className="w-full px-5 py-4 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-100 focus:border-black rounded-xl text-sm font-semibold transition-all font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
+                    구글 커스텀 검색엔진 관리자 포털에서 발급한 검색엔진 ID (cx 파라미터)를 입력하세요.
+                  </p>
+                </div>
+
+                {/* Integration Guide Section */}
+                <div className="p-5 bg-slate-50/75 border border-slate-100 rounded-2xl space-y-4">
+                  <h5 className="text-[10px] font-black tracking-widest uppercase text-slate-900 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600" /> 어디서 발급받나요?
+                  </h5>
+                  <ul className="text-xs text-slate-500 font-medium space-y-3 pl-3 list-decimal leading-relaxed">
+                    <li>
+                      <a 
+                        href="https://console.cloud.google.com/apis/library/customsearch.googleapis.com" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 font-black hover:underline inline-flex items-center gap-1"
+                      >
+                        Google Custom Search API <ExternalLink size={10} />
+                      </a> 
+                      활성화 후 API 자격 증명(키)을 획득하십시오.
+                    </li>
+                    <li>
+                      <a 
+                        href="https://programmablesearchengine.google.com/" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 font-black hover:underline inline-flex items-center gap-1"
+                      >
+                        Programmable Search Engine <ExternalLink size={10} />
+                      </a> 
+                      포털에서 검색엔진을 생성합니다.
+                    </li>
+                    <li className="text-slate-900 font-bold italic">
+                      설정 중 '웹 전체 검색 (Search the entire web)' 옵션을 반드시 활성화하셔야 정상적인 전역 뉴스 수집이 작동합니다.
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="flex-grow font-semibold" />
+
+                {/* Form Buttons */}
+                <div className="pt-6 border-t border-slate-100 bg-white flex flex-col gap-3">
+                  <button
+                    type="submit"
+                    disabled={saveSuccess}
+                    className="w-full py-4 bg-black text-white font-black text-xs tracking-[0.2em] uppercase rounded-xl shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 text-center cursor-pointer disabled:bg-slate-400"
+                  >
+                    {saveSuccess ? (
+                      <>
+                        <Check size={14} className="text-green-400 animate-bounce" /> 설정 반영 완료!
+                      </>
+                    ) : (
+                      <>
+                        <Save size={14} /> 설정 및 저장 동기화
+                      </>
+                    )}
+                  </button>
+                  
+                  {hasSavedKeys && (
+                    <button
+                      type="button"
+                      onClick={handleClearSettings}
+                      className="w-full py-4 border border-red-200 bg-red-50 hover:bg-red-105 text-red-600 font-black text-xs tracking-[0.2em] uppercase rounded-xl transition-all text-center cursor-pointer"
+                    >
+                      설정 초기화 (기본 공유 검색망 복원)
+                    </button>
+                  )}
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

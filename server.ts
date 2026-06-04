@@ -186,133 +186,280 @@ interface NewsResponse {
   isQuotaExceeded: boolean;
 }
 
-async function searchNews(keyword: string): Promise<NewsResponse> {
-  const currentPreciseTime = new Date();
-  const currentPreciseTimeISO = currentPreciseTime.toISOString();
-  let groundingChunks: any[] = [];
-  let isQuotaExceeded = false;
-  
-  // 1. First Attempt with googleSearch tool
+async function searchNewsRSS(keyword: string): Promise<{ url: string; title: string; source: string }[]> {
   try {
-    const today = new Date().toISOString().split('T')[0];
-    const searchResponse = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: `금일 기준 "${keyword}"에 관한 실시간 최신 뉴스 기사 및 미디어 보도 자료를 구글 검색(googleSearch)으로 신속하고 정밀하게 수색하여 실시간 보도 정보를 파악해 주세요.`,
-      config: {
-        systemInstruction: `당신은 실시간 최신 한국 뉴스 및 보도 소식을 신속히 추적하고 수집하는 전문 정보 분석가입니다. 
-        오늘의 날짜는 ${today} 입니다. 반드시 구글 검색 도구(googleSearch)를 활성화하여, 주어진 검색어에 관한 신뢰성 있는 뉴스 본문, 공식 보도 자료, 언론 보도 기사들의 리얼타임 최신 정보를 정밀하게 검색해 주십시오.`,
-        tools: [{ googleSearch: {} }]
+    console.log(`[RSS Fallback] Fetching latest news from Google News RSS for key: "${keyword}"`);
+    const searchUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`;
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       }
     });
-
-    const candidate = searchResponse.candidates?.[0];
-    groundingChunks = candidate?.groundingMetadata?.groundingChunks || [];
-  } catch (err: any) {
-    if (isQuotaError(err)) {
-      isQuotaExceeded = true;
-      console.log(`[Quota Check] Google Search API quota limit reached for keyword: "${keyword}"`);
-    } else {
-      console.error("1단계 구글 검색 실패:", err.message || err);
+    if (!response.ok) {
+      throw new Error(`Google News RSS fetch failed with status: ${response.status}`);
     }
-  }
+    const xmlText = await response.text();
+    
+    const results: { url: string; title: string; source: string }[] = [];
+    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+    let match;
+    const seenUrls = new Set<string>();
 
-  // 1.5 Second Attempt with googleSearch tool (only if first attempt didn't hit quota but returned no chunks)
-  if (!isQuotaExceeded && (!groundingChunks || groundingChunks.length === 0)) {
-    try {
-      console.log("Stage 1 grounding data empty, launching Stage 1.5 backup news search for:", keyword);
-      const searchResponse2 = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: `"${keyword} 뉴스 기사 보도 속보" 정보를 구글 검색(googleSearch)으로 직접 탐색하고 수집해 주세요.`,
-        config: {
-          systemInstruction: `당신은 구글 검색 도구(googleSearch)를 사용하여 실시간 최신 한국 소식과 언론 보도를 검색하는 어시스턴트입니다.`,
-          tools: [{ googleSearch: {} }]
-        }
-      });
-      groundingChunks = searchResponse2.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    } catch (err: any) {
-      if (isQuotaError(err)) {
-        isQuotaExceeded = true;
-        console.log(`[Quota Check] Base/Grounding search quota reached during Stage 1.5 backup check.`);
-      } else {
-        console.error("2차 구글 검색 검색 실패:", err.message || err);
-      }
-    }
-  }
-
-  // If a quota error was confirmed, return empty list with isQuotaExceeded flag to be honest with the user
-  if (isQuotaExceeded) {
-    console.warn("구글 리얼타임 검색 기한 할당량 초과 감지 - 사용자 인지 강화를 위해 정직한 공백 결과 리턴");
-    return {
-      articles: [],
-      isQuotaExceeded: true
-    };
-  }
-
-  const rawArticles: { url: string; title: string; source: string }[] = [];
-  const seenUrls = new Set<string>();
-
-  if (groundingChunks && groundingChunks.length > 0) {
-    for (const chunk of groundingChunks) {
-      const rawUrl = chunk.web?.uri;
-      const rawTitle = chunk.web?.title || '';
+    while ((match = itemRegex.exec(xmlText)) !== null) {
+      const itemContent = match[1];
       
-      if (!rawUrl) continue;
+      const titleMatch = itemContent.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = itemContent.match(/<link>([\s\S]*?)<\/link>/);
+      const sourceMatch = itemContent.match(/<source[^>]*>([\s\S]*?)<\/source>/);
       
+      let rawTitle = titleMatch ? titleMatch[1].trim() : '';
+      let rawUrl = linkMatch ? linkMatch[1].trim() : '';
+      let sourceName = sourceMatch ? sourceMatch[1].trim() : '';
+      
+      if (!rawTitle || !rawUrl) continue;
+
+      // Unescape basic XML entities
+      rawTitle = rawTitle
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+        
+      sourceName = sourceName
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+
       const cleanUrl = cleanNewsUrl(rawUrl);
       if (!cleanUrl || !cleanUrl.startsWith('http') || cleanUrl.includes('google.com/search') || cleanUrl.includes('google.co.kr/search')) {
         continue;
       }
-
-      try {
-        const uObj = new URL(cleanUrl);
-        const host = uObj.hostname.toLowerCase();
-        
-        // Skip homepage/root of search engines
-        if (/^(www\.)?google\.(com|co\.kr)$/i.test(host) && (uObj.pathname === '/' || uObj.pathname === '')) {
-          continue;
-        }
-
-        // Avoid adding generic news portal home pages which lack specific article paths
-        if (host.includes('naver.com')) {
-          const isArticle = uObj.pathname.includes('/article/') || 
-                            uObj.pathname.includes('read.nhn') || 
-                            uObj.pathname.includes('read.naver') ||
-                            uObj.searchParams.has('aid');
-          if (!isArticle) continue;
-        }
-        
-        if (host.includes('daum.net')) {
-          const isArticle = uObj.pathname.includes('/v/') || 
-                            uObj.pathname.includes('/article/') || 
-                            uObj.pathname.includes('read') ||
-                            uObj.searchParams.has('id');
-          if (!isArticle) continue;
-        }
-      } catch {}
 
       const cleanTitle = sanitizeTitle(rawTitle);
       if (!cleanTitle || cleanTitle.length < 3 || isDomainTitle(cleanTitle)) {
         continue;
       }
 
+      if (!sourceName) {
+        sourceName = extractSourceFromUrl(cleanUrl);
+      }
+
       const key = cleanUrl.toLowerCase().replace(/\/$/, "");
       if (!seenUrls.has(key)) {
         seenUrls.add(key);
-        rawArticles.push({
+        results.push({
           url: cleanUrl,
           title: cleanTitle,
-          source: extractSourceFromUrl(cleanUrl)
+          source: sourceName
         });
+      }
+      
+      if (results.length >= 10) {
+        break;
+      }
+    }
+    
+    console.log(`[RSS Fallback] Successfully gathered ${results.length} articles from Google News RSS.`);
+    return results;
+  } catch (err: any) {
+    console.error("[RSS Fallback] News RSS search failed:", err.message || err);
+    return [];
+  }
+}
+
+async function searchNews(keyword: string, customApiKey?: string, customCseId?: string): Promise<NewsResponse> {
+  const currentPreciseTime = new Date();
+  const currentPreciseTimeISO = currentPreciseTime.toISOString();
+  let groundingChunks: any[] = [];
+  let isQuotaExceeded = false;
+  let useCse = false;
+  
+  const googleApiKey = customApiKey || process.env.GOOGLE_API_KEY;
+  const googleCseId = customCseId || process.env.GOOGLE_CSE_ID;
+  
+  const rawArticles: { url: string; title: string; source: string }[] = [];
+  const seenUrls = new Set<string>();
+
+  // 1. Try Google Custom Search API (CSE) first if credential is provided
+  if (googleApiKey && googleCseId) {
+    try {
+      console.log(`[CSE Search] Querying official Google Custom Search API for keyword: "${keyword}"`);
+      const cseUrl = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(googleApiKey)}&cx=${encodeURIComponent(googleCseId)}&q=${encodeURIComponent(keyword)}&num=10`;
+      const response = await fetch(cseUrl);
+      if (response.ok) {
+        const data = await response.json() as any;
+        const items = data.items || [];
+        console.log(`[CSE Search] Successfully retrieved ${items.length} search results.`);
+        if (items.length > 0) {
+          useCse = true;
+          for (const item of items) {
+            const rawUrl = item.link;
+            const rawTitle = item.title || '';
+            if (!rawUrl) continue;
+            
+            const cleanUrl = cleanNewsUrl(rawUrl);
+            if (!cleanUrl || !cleanUrl.startsWith('http') || cleanUrl.includes('google.com/search') || cleanUrl.includes('google.co.kr/search')) {
+              continue;
+            }
+            const cleanTitle = sanitizeTitle(rawTitle);
+            if (!cleanTitle || cleanTitle.length < 3 || isDomainTitle(cleanTitle)) {
+              continue;
+            }
+            
+            const key = cleanUrl.toLowerCase().replace(/\/$/, "");
+            if (!seenUrls.has(key)) {
+              seenUrls.add(key);
+              rawArticles.push({
+                url: cleanUrl,
+                title: cleanTitle,
+                source: extractSourceFromUrl(cleanUrl)
+              });
+            }
+          }
+        }
+      } else {
+        const errBody = await response.text();
+        console.error(`[CSE Search] Request failed. Status: ${response.status}. Body: ${errBody}`);
+      }
+    } catch (err: any) {
+      console.error("[CSE Search] Error during Custom Search API call:", err.message || err);
+    }
+  }
+
+  // 2. If Custom Search was not configured or returned no items, fall back to Gemini Google Search Grounding Tool
+  if (!useCse || rawArticles.length === 0) {
+    console.log(`[Grounding Search] Falling back to Gemini built-in search grounding tool for keyword: "${keyword}"`);
+    // First Attempt with googleSearch tool
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const searchResponse = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: `금일 기준 "${keyword}"에 관한 실시간 최신 뉴스 기사 및 미디어 보도 자료를 구글 검색(googleSearch)으로 신속하고 정밀하게 수색하여 실시간 보도 정보를 파악해 주세요.`,
+        config: {
+          systemInstruction: `당신은 실시간 최신 한국 뉴스 및 보도 소식을 신속히 추적하고 수집하는 전문 정보 분석가입니다. 
+          오늘의 날짜는 ${today} 입니다. 반드시 구글 검색 도구(googleSearch)를 활성화하여, 주어진 검색어에 관한 신뢰성 있는 뉴스 본문, 공식 보도 자료, 언론 보도 기사들의 리얼타임 최신 정보를 정밀하게 검색해 주십시오.`,
+          tools: [{ googleSearch: {} }]
+        }
+      });
+
+      const candidate = searchResponse.candidates?.[0];
+      groundingChunks = candidate?.groundingMetadata?.groundingChunks || [];
+    } catch (err: any) {
+      if (isQuotaError(err)) {
+        isQuotaExceeded = true;
+        console.log(`[Quota Check] Google Search API quota limit reached for keyword: "${keyword}"`);
+      } else {
+        console.error("1단계 구글 검색 실패:", err.message || err);
+      }
+    }
+
+    // 1.5 Second Attempt with googleSearch tool (only if first attempt didn't hit quota but returned no chunks)
+    if (!isQuotaExceeded && (!groundingChunks || groundingChunks.length === 0)) {
+      try {
+        console.log("Stage 1 grounding data empty, launching Stage 1.5 backup news search for:", keyword);
+        const searchResponse2 = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: `"${keyword} 뉴스 기사 보도 속보" 정보를 구글 검색(googleSearch)으로 직접 탐색하고 수집해 주세요.`,
+          config: {
+            systemInstruction: `당신은 구글 검색 도구(googleSearch)를 사용하여 실시간 최신 한국 소식과 언론 보도를 검색하는 어시스턴트입니다.`,
+            tools: [{ googleSearch: {} }]
+          }
+        });
+        groundingChunks = searchResponse2.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      } catch (err: any) {
+        if (isQuotaError(err)) {
+          isQuotaExceeded = true;
+          console.log(`[Quota Check] Base/Grounding search quota reached during Stage 1.5 backup check.`);
+        } else {
+          console.error("2차 구글 검색 검색 실패:", err.message || err);
+        }
+      }
+    }
+
+    if (!isQuotaExceeded && groundingChunks && groundingChunks.length > 0) {
+      for (const chunk of groundingChunks) {
+        const rawUrl = chunk.web?.uri;
+        const rawTitle = chunk.web?.title || '';
+        
+        if (!rawUrl) continue;
+        
+        const cleanUrl = cleanNewsUrl(rawUrl);
+        if (!cleanUrl || !cleanUrl.startsWith('http') || cleanUrl.includes('google.com/search') || cleanUrl.includes('google.co.kr/search')) {
+          continue;
+        }
+
+        try {
+          const uObj = new URL(cleanUrl);
+          const host = uObj.hostname.toLowerCase();
+          
+          // Skip homepage/root of search engines
+          if (/^(www\.)?google\.(com|co\.kr)$/i.test(host) && (uObj.pathname === '/' || uObj.pathname === '')) {
+            continue;
+          }
+
+          // Avoid adding generic news portal home pages which lack specific article paths
+          if (host.includes('naver.com')) {
+            const isArticle = uObj.pathname.includes('/article/') || 
+                              uObj.pathname.includes('read.nhn') || 
+                              uObj.pathname.includes('read.naver') ||
+                              uObj.searchParams.has('aid');
+            if (!isArticle) continue;
+          }
+          
+          if (host.includes('daum.net')) {
+            const isArticle = uObj.pathname.includes('/v/') || 
+                              uObj.pathname.includes('/article/') || 
+                              uObj.pathname.includes('read') ||
+                              uObj.searchParams.has('id');
+            if (!isArticle) continue;
+          }
+        } catch {}
+
+        const cleanTitle = sanitizeTitle(rawTitle);
+        if (!cleanTitle || cleanTitle.length < 3 || isDomainTitle(cleanTitle)) {
+          continue;
+        }
+
+        const key = cleanUrl.toLowerCase().replace(/\/$/, "");
+        if (!seenUrls.has(key)) {
+          seenUrls.add(key);
+          rawArticles.push({
+            url: cleanUrl,
+            title: cleanTitle,
+            source: extractSourceFromUrl(cleanUrl)
+          });
+        }
+      }
+    }
+
+    // 3. Fallback to Google News RSS if quota limit was reached or zero grounding elements were returned!
+    if (rawArticles.length === 0) {
+      console.log(`[Search Flow] Grounding unavailable or hit quota. Querying RSS fallback for: "${keyword}"`);
+      const rssArticles = await searchNewsRSS(keyword);
+      if (rssArticles && rssArticles.length > 0) {
+        for (const art of rssArticles) {
+          const key = art.url.toLowerCase().replace(/\/$/, "");
+          if (!seenUrls.has(key)) {
+            seenUrls.add(key);
+            rawArticles.push(art);
+          }
+        }
+        isQuotaExceeded = false; // Successfully resolved using RSS feed!
       }
     }
   }
 
-  // If search successfully finished but returned literally no valid links, also return empty list factually
+  // If search successfully finished but returned literally no valid links, return empty list
   if (rawArticles.length === 0) {
     console.warn("구글 리얼타임 최신 검색에서 실시간으로 감지된 최신 유효 뉴스 청크가 존재하지 않습니다.");
     return {
       articles: [],
-      isQuotaExceeded: false
+      isQuotaExceeded: isQuotaExceeded
     };
   }
 
@@ -461,23 +608,28 @@ async function startServer() {
 
   // API Route - News Search
   app.post("/api/news", async (req, res) => {
-    const { keyword } = req.body;
+    const { keyword, customApiKey: bodyApiKey, customCseId: bodyCseId } = req.body;
     if (!keyword) {
       return res.status(400).json({ error: "검색어가 존재하지 않습니다." });
     }
     
-    const cacheKey = keyword.trim().toLowerCase();
+    const customApiKey = (req.headers["x-google-api-key"] as string) || bodyApiKey;
+    const customCseId = (req.headers["x-google-cse-id"] as string) || bodyCseId;
+    const hasCustomKeys = !!(customApiKey && customCseId);
+
+    // Create a unique cache key incorporating custom keys if present to isolate caches
+    const cacheKey = `${keyword.trim().toLowerCase()}${hasCustomKeys ? `_custom_${customApiKey.substring(0, 6)}_${customCseId}` : ""}`;
     const cached = searchCache[cacheKey];
     const now = Date.now();
 
     // Serve from cache if available, fresh, and contains actual articles without quota failure
     if (cached && (now - cached.timestamp < CACHE_TTL_MS) && !cached.data.isQuotaExceeded && cached.data.articles.length > 0) {
-      console.log(`[Cache Hit] Serving cached news articles for: "${keyword}" (Age: ${Math.round((now - cached.timestamp)/1000)}s)`);
+      console.log(`[Cache Hit] Serving cached news articles for: "${keyword}"${hasCustomKeys ? " (Custom Engine)" : ""} (Age: ${Math.round((now - cached.timestamp)/1000)}s)`);
       return res.json(cached.data);
     }
 
     try {
-      const results = await searchNews(keyword);
+      const results = await searchNews(keyword, customApiKey, customCseId);
       
       // Only cache valid grounding articles to avoid caching empty/erroneous responses
       if (!results.isQuotaExceeded && results.articles.length > 0) {

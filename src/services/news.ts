@@ -6,11 +6,23 @@ export function cleanNewsUrl(url: string | undefined): string {
 
 export async function searchNews(keyword: string): Promise<{ articles: Article[]; isQuotaExceeded: boolean }> {
   try {
+    const customApiKey = typeof window !== "undefined" ? localStorage.getItem("GOOGLE_API_KEY") : null;
+    const customCseId = typeof window !== "undefined" ? localStorage.getItem("GOOGLE_CSE_ID") : null;
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (customApiKey) {
+      headers["X-Google-Api-Key"] = customApiKey;
+    }
+    if (customCseId) {
+      headers["X-Google-Cse-Id"] = customCseId;
+    }
+
     const response = await fetch("/api/news", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({ keyword }),
     });
 

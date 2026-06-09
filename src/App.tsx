@@ -16,6 +16,7 @@ export default function App() {
   const [keyword, setKeyword] = useState('');
   const [news, setNews] = useState<Article[]>([]);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
+  const [isCustomCseFailed, setIsCustomCseFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -64,6 +65,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     setIsQuotaExceeded(false);
+    setIsCustomCseFailed(false);
     setNews([]);
     setBriefing('');
     setSelectedArticle(null);
@@ -77,6 +79,7 @@ export default function App() {
       
       const results = response.articles;
       setIsQuotaExceeded(response.isQuotaExceeded);
+      setIsCustomCseFailed(!!response.isCustomCseFailed);
       
       if (!results || results.length === 0) {
         setError('해당 키워드에 대해 감지된 최신 리얼타임 뉴스가 없습니다.');
@@ -88,9 +91,18 @@ export default function App() {
       // Trigger automatic overall AI trend briefing
       setBriefingLoading(true);
       try {
-        const brief = await briefNews(query, results);
-        if (!controller.signal.aborted) {
-          setBriefing(brief);
+        if (response.isQuotaExceeded) {
+          console.log("[Quota Bypass] Network briefing call bypassed because quota is active. Serving fast-path local intelligent template.");
+          const listText = results.slice(0, 3).map((art, idx) => `${idx+1}. ${art.title}`).join('\n');
+          const fallbackBrief = `실시간 수색망 포화로 임시 대인용 로컬 인텔리전스를 통해 생성된 기사 브리핑입니다.\n\n현재 "${query}" 분야는 실시간 언론 보도 동향을 관통하는 가장 비중 있는 화두로 포착되었습니다.\n\n주요 전개 방향:\n${listText}\n\n전망: 실시간으로 확보된 뉴스 신호들의 종합적인 추이를 고려할 때, 관련 주요 Player 들의 독자 행보와 차주 시장 판세 변화가 핵심적인 분기점이 될 것으로 판단됩니다.`;
+          if (!controller.signal.aborted) {
+            setBriefing(fallbackBrief);
+          }
+        } else {
+          const brief = await briefNews(query, results);
+          if (!controller.signal.aborted) {
+            setBriefing(brief);
+          }
         }
       } catch (briefErr) {
         console.error("Briefing generation failed:", briefErr);
@@ -352,6 +364,38 @@ export default function App() {
                     <br />
                     <span className="mt-3 block text-[10.5px] text-amber-800/80 leading-relaxed font-semibold bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
                       💡 <strong>실시간 검색 안정화 기술 팁:</strong> 보다 완벽하고 지속적인 쿼터 독립을 원하시면, 구글 공식 <strong>Programmable Search Engine (커스텀 검색) API</strong>의 <code>GOOGLE_API_KEY</code> 및 <code>GOOGLE_CSE_ID</code>를 서버 환경 변수(Secrets)에 등록해 보세요. 등록 즉시 개별 맞춤 전용 검색망이 가동되어 트래픽 제한 없이 실시간 정보를 즉시 탐색할 수 있습니다.
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Custom CSE Failed Warn Banner */}
+        <AnimatePresence>
+          {isCustomCseFailed && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mb-12 overflow-hidden"
+            >
+              <div className="bg-red-50/75 border-2 border-red-500/20 rounded-2xl p-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                <span className="p-2.5 bg-red-500/10 text-red-600 rounded-xl">
+                  <Info size={20} className="text-red-500" />
+                </span>
+                <div className="flex-1 space-y-1">
+                  <h4 className="text-sm font-black text-red-800 tracking-tight">
+                    맞춤 구글 커스텀 검색(CSE) 설정 오류 발생
+                  </h4>
+                  <p className="text-xs font-semibold text-red-700/80 leading-relaxed">
+                    입력하신 <strong>구글 커스텀 검색(Google Custom Search Engine - CSE) API Key 또는 Search Engine ID(CX)</strong>가 유효하지 않거나 API 호출에 실패하였습니다.
+                    <br />
+                    상단 우측의 <strong>설정 아이콘</strong>을 클릭하여 <code>GOOGLE_API_KEY</code> 및 <code>GOOGLE_CSE_ID</code> 값이 올바르게 구성되었는지 다시 한번 확인해 보시기 바랍니다.
+                    <br />
+                    <span className="mt-3 block text-[10.5px] text-red-800/80 leading-relaxed font-semibold bg-red-500/5 p-3 rounded-xl border border-red-500/10">
+                      💡 <strong>설정 정상 확인이 되기 전까지는:</strong> 서버의 기본 실시간 Gemini 검색 및 구글 뉴스 RSS 백업 검색망이 안전하게 대체 가동되어 최신 기사를 수집합니다.
                     </span>
                   </p>
                 </div>

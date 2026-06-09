@@ -4,7 +4,7 @@ export function cleanNewsUrl(url: string | undefined): string {
   return url || '';
 }
 
-export async function searchNews(keyword: string): Promise<{ articles: Article[]; isQuotaExceeded: boolean }> {
+export async function searchNews(keyword: string): Promise<{ articles: Article[]; isQuotaExceeded: boolean; isCustomCseFailed?: boolean }> {
   try {
     const customApiKey = typeof window !== "undefined" ? localStorage.getItem("GOOGLE_API_KEY") : null;
     const customCseId = typeof window !== "undefined" ? localStorage.getItem("GOOGLE_CSE_ID") : null;

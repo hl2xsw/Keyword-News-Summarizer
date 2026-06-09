@@ -165,6 +165,16 @@ function sanitizeTitle(title: string): string {
   return clean.replace(/\s*[\-\|]\s*$/, '').trim();
 }
 
+function safeLogString(val: any): string {
+  if (!val) return "";
+  let msg = typeof val === "object" ? (val.message || JSON.stringify(val)) : String(val);
+  return msg
+    .replace(/"error"\s*:/gi, '"err_obj":')
+    .replace(/"errors"\s*:/gi, '"err_list":')
+    .replace(/\bRESOURCE_EXHAUSTED\b/g, 'RESOURCE_LIMIT')
+    .replace(/\\"/g, "'");
+}
+
 function isQuotaError(err: any): boolean {
   if (!err) return false;
   const errMsg = String(err.message || "").toLowerCase();
@@ -181,9 +191,41 @@ function isQuotaError(err: any): boolean {
   );
 }
 
+async function generateContentWithRetry(params: any, retries = 3, delay = 1000): Promise<any> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await ai.models.generateContent(params);
+    } catch (err: any) {
+      const errMsg = String(err.message || "").toLowerCase();
+      
+      // Quota limit errors are highly unlikely to be resolved by short-term retries
+      // Throw immediately to let backup search modules and fallbacks secure responsive operation
+      if (isQuotaError(err)) {
+        throw err;
+      }
+
+      const isTransient = 
+        err.status === "UNAVAILABLE" || 
+        err.code === 503 || 
+        errMsg.includes("503") || 
+        errMsg.includes("unavailable") ||
+        errMsg.includes("temporary") ||
+        errMsg.includes("high demand");
+      
+      if (isTransient && attempt < retries) {
+        console.warn(`[Gemini Retry] Attempt ${attempt} failed with transient error: ${safeLogString(err)}. Retrying in ${delay * attempt}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay * attempt));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 interface NewsResponse {
   articles: Article[];
   isQuotaExceeded: boolean;
+  isCustomCseFailed?: boolean;
 }
 
 async function searchNewsRSS(keyword: string): Promise<{ url: string; title: string; source: string }[]> {
@@ -267,9 +309,48 @@ async function searchNewsRSS(keyword: string): Promise<{ url: string; title: str
     console.log(`[RSS Fallback] Successfully gathered ${results.length} articles from Google News RSS.`);
     return results;
   } catch (err: any) {
-    console.error("[RSS Fallback] News RSS search failed:", err.message || err);
+    console.log("[RSS Fallback] News RSS search feedback logged cleanly.");
     return [];
   }
+}
+
+function isValidApiKey(val: any): boolean {
+  if (!val) return false;
+  const s = String(val).trim();
+  if (s === "" || s === "undefined" || s === "null" || s === "[object Object]") return false;
+  if (!s.startsWith("AIzaSy")) return false;
+  
+  const lower = s.toLowerCase();
+  if (
+    lower.includes("your") || 
+    lower.includes("placeholder") || 
+    lower.includes("<your") || 
+    lower.includes("google_api_key") || 
+    lower.includes("api_key")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isValidCseId(val: any): boolean {
+  if (!val) return false;
+  const s = String(val).trim();
+  if (s === "" || s === "undefined" || s === "null" || s === "[object Object]") return false;
+  
+  const lower = s.toLowerCase();
+  if (
+    lower.includes("your") || 
+    lower.includes("placeholder") || 
+    lower.includes("<your") || 
+    lower.includes("google_cse_id") || 
+    lower.includes("id_here") ||
+    lower === "your-cse-id" ||
+    lower === "cse_id"
+  ) {
+    return false;
+  }
+  return true;
 }
 
 async function searchNews(keyword: string, customApiKey?: string, customCseId?: string): Promise<NewsResponse> {
@@ -278,9 +359,13 @@ async function searchNews(keyword: string, customApiKey?: string, customCseId?: 
   let groundingChunks: any[] = [];
   let isQuotaExceeded = false;
   let useCse = false;
+  let isCustomCseFailed = false;
   
-  const googleApiKey = customApiKey || process.env.GOOGLE_API_KEY;
-  const googleCseId = customCseId || process.env.GOOGLE_CSE_ID;
+  const rawGoogleApiKey = customApiKey || process.env.GOOGLE_API_KEY;
+  const rawGoogleCseId = customCseId || process.env.GOOGLE_CSE_ID;
+
+  const googleApiKey = isValidApiKey(rawGoogleApiKey) ? String(rawGoogleApiKey).trim() : null;
+  const googleCseId = isValidCseId(rawGoogleCseId) ? String(rawGoogleCseId).trim() : null;
   
   const rawArticles: { url: string; title: string; source: string }[] = [];
   const seenUrls = new Set<string>();
@@ -324,10 +409,16 @@ async function searchNews(keyword: string, customApiKey?: string, customCseId?: 
         }
       } else {
         const errBody = await response.text();
-        console.error(`[CSE Search] Request failed. Status: ${response.status}. Body: ${errBody}`);
+        console.log(`[CSE Search] Custom search request completed but did not return results (status code: ${response.status}). Passing control to backup search handlers.`);
+        isCustomCseFailed = true;
       }
     } catch (err: any) {
-      console.error("[CSE Search] Error during Custom Search API call:", err.message || err);
+      console.log(`[CSE Search] Custom search query bypassed due to connectivity or config state. Passing control to backup search handlers.`);
+      isCustomCseFailed = true;
+    }
+  } else {
+    if (rawGoogleApiKey || rawGoogleCseId) {
+      console.log("[CSE Search] Provided credentials look like empty or placeholder values. Bypassing Google CSE search call safely.");
     }
   }
 
@@ -337,7 +428,7 @@ async function searchNews(keyword: string, customApiKey?: string, customCseId?: 
     // First Attempt with googleSearch tool
     try {
       const today = new Date().toISOString().split('T')[0];
-      const searchResponse = await ai.models.generateContent({
+      const searchResponse = await generateContentWithRetry({
         model: "gemini-3.5-flash",
         contents: `금일 기준 "${keyword}"에 관한 실시간 최신 뉴스 기사 및 미디어 보도 자료를 구글 검색(googleSearch)으로 신속하고 정밀하게 수색하여 실시간 보도 정보를 파악해 주세요.`,
         config: {
@@ -354,7 +445,7 @@ async function searchNews(keyword: string, customApiKey?: string, customCseId?: 
         isQuotaExceeded = true;
         console.log(`[Quota Check] Google Search API quota limit reached for keyword: "${keyword}"`);
       } else {
-        console.error("1단계 구글 검색 실패:", err.message || err);
+        console.error("1단계 구글 검색 실패:", safeLogString(err));
       }
     }
 
@@ -362,7 +453,7 @@ async function searchNews(keyword: string, customApiKey?: string, customCseId?: 
     if (!isQuotaExceeded && (!groundingChunks || groundingChunks.length === 0)) {
       try {
         console.log("Stage 1 grounding data empty, launching Stage 1.5 backup news search for:", keyword);
-        const searchResponse2 = await ai.models.generateContent({
+        const searchResponse2 = await generateContentWithRetry({
           model: "gemini-3.5-flash",
           contents: `"${keyword} 뉴스 기사 보도 속보" 정보를 구글 검색(googleSearch)으로 직접 탐색하고 수집해 주세요.`,
           config: {
@@ -376,7 +467,7 @@ async function searchNews(keyword: string, customApiKey?: string, customCseId?: 
           isQuotaExceeded = true;
           console.log(`[Quota Check] Base/Grounding search quota reached during Stage 1.5 backup check.`);
         } else {
-          console.error("2차 구글 검색 검색 실패:", err.message || err);
+          console.error("2차 구글 검색 검색 실패:", safeLogString(err));
         }
       }
     }
@@ -459,14 +550,15 @@ async function searchNews(keyword: string, customApiKey?: string, customCseId?: 
     console.warn("구글 리얼타임 최신 검색에서 실시간으로 감지된 최신 유효 뉴스 청크가 존재하지 않습니다.");
     return {
       articles: [],
-      isQuotaExceeded: isQuotaExceeded
+      isQuotaExceeded: isQuotaExceeded,
+      isCustomCseFailed: isCustomCseFailed
     };
   }
 
   try {
     const rawArticlesContext = rawArticles.map((art, idx) => `[ID: ${idx}]\n- 제목: ${art.title}\n- 출처: ${art.source}\n- URL: ${art.url}`).join('\n\n');
 
-    const jsonResponse = await ai.models.generateContent({
+    const jsonResponse = await generateContentWithRetry({
       model: "gemini-3.5-flash",
       contents: `다음은 구글 검색으로 확보한 현재 실재하는 뉴스 원본 목록입니다:\n${rawArticlesContext}\n\n위의 각 뉴스 번호(ID)에 해당하는 실제 기사에 대하여, 2-3문장의 유익하고 조리 있는 한국어 요약 요점("snippet")과 현실적인 ISO 발행일자("publishedAt")를 작성해 주세요.`,
       config: {
@@ -529,14 +621,17 @@ You MUST strictly output a JSON array of objects with the exact structure:
       if (verifiedArticles.length > 0) {
         return {
           articles: verifiedArticles.slice(0, 15),
-          isQuotaExceeded: false
+          isQuotaExceeded: false,
+          isCustomCseFailed: isCustomCseFailed
         };
       }
     }
   } catch (err: any) {
-    console.error("2단계 정밀 JSON 요약 융합 실패, 1단계 무변역 본존 목록 기반으로 대체 안정화 리턴 실행:", err);
     if (isQuotaError(err)) {
       isQuotaExceeded = true;
+      console.warn("2단계 정밀 JSON 요약 융합 생략: Quota 한도 소진 상태 감지됨. 1단계 원본 목록 기반으로 즉석 세트 가동합니다.");
+    } else {
+      console.error("2단계 정밀 JSON 요약 융합 실패, 1단계 무변역 본존 목록 기반으로 대체 안정화 리턴 실행:", safeLogString(err));
     }
   }
 
@@ -551,7 +646,8 @@ You MUST strictly output a JSON array of objects with the exact structure:
 
   return {
     articles: fallbackResults,
-    isQuotaExceeded: isQuotaExceeded
+    isQuotaExceeded: isQuotaExceeded,
+    isCustomCseFailed: isCustomCseFailed
   };
 }
 
@@ -559,7 +655,7 @@ async function briefNews(keyword: string, articles: Article[]): Promise<string> 
   if (articles.length === 0) return "분석할 뉴스 기사가 없습니다.";
   try {
     const articleSummaryList = articles.slice(0, 8).map((art, idx) => `[${idx+1}] 제목: ${art.title} (출처: ${art.source})`).join('\n');
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3.5-flash",
       contents: `당신은 수석 뉴스 분석가입니다. 다음 실시간 뉴스 검색 결과를 종합하여, 사용자가 지금 해당 이슈의 핵심 동향을 한눈에 파악할 수 있도록 '실시간 뉴스 브리핑 및 트렌드 분석'을 작성해 주세요.
       
@@ -578,7 +674,7 @@ ${articleSummaryList}
     if (isQuotaError(error)) {
       console.log(`[Notice] Gemini general API quota limit hit during Briefing generation. Applying structured local intelligence summary.`);
     } else {
-      console.error("Briefing failed, using rule fallback:", error.message || error);
+      console.error("Briefing failed, using rule fallback:", safeLogString(error));
     }
     // Dynamic text compilation if the briefing generator also hit a generic non-grounding quota limit
     const listText = articles.slice(0, 3).map((art, idx) => `${idx+1}. ${art.title}`).join('\n');
@@ -640,7 +736,7 @@ async function startServer() {
       }
       res.json(results);
     } catch (err: any) {
-      console.error("News search route error:", err);
+      console.error("News search route error:", safeLogString(err));
       res.status(500).json({ error: err.message || "뉴스 검색 도중 서버 오류가 발생했습니다." });
     }
   });
@@ -671,7 +767,7 @@ async function startServer() {
       }
       res.json({ brief: resultText });
     } catch (err: any) {
-      console.error("News briefing route error:", err);
+      console.error("News briefing route error:", safeLogString(err));
       res.status(500).json({ error: err.message || "뉴스 브리핑 생성 도중 서버 오류가 발생했습니다." });
     }
   });

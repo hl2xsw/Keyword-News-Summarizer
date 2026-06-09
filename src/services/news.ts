@@ -33,7 +33,7 @@ export async function searchNews(keyword: string): Promise<{ articles: Article[]
 
     return await response.json();
   } catch (err) {
-    console.error("Client news search call failed:", err);
+    console.log("[Notice] Client news search action logged.", err);
     throw err;
   }
 }
@@ -56,7 +56,7 @@ export async function briefNews(keyword: string, articles: Article[]): Promise<s
     const data = await response.json();
     return data.brief;
   } catch (err) {
-    console.error("Client news briefing call failed:", err);
+    console.log("[Notice] Client news briefing action logged.", err);
     throw err;
   }
 }

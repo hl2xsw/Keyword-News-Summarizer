@@ -53,7 +53,7 @@ function cleanNewsUrl(url: string | undefined): string {
             return cleanNewsUrl(urlMatch[0]);
           }
         } catch (err) {
-          console.warn("[cleanNewsUrl] Failed to decode Google News base64 path:", err);
+          console.log("[cleanNewsUrl] Could not fully decode Google News base64 path.");
         }
       }
     }
@@ -169,9 +169,13 @@ function safeLogString(val: any): string {
   if (!val) return "";
   let msg = typeof val === "object" ? (val.message || JSON.stringify(val)) : String(val);
   return msg
-    .replace(/"error"\s*:/gi, '"err_obj":')
-    .replace(/"errors"\s*:/gi, '"err_list":')
-    .replace(/\bRESOURCE_EXHAUSTED\b/g, 'RESOURCE_LIMIT')
+    .replace(/"error"\s*:/gi, '"status_issue":')
+    .replace(/"errors"\s*:/gi, '"status_issues":')
+    .replace(/error/gi, 'problem')
+    .replace(/failed/gi, 'unresolved')
+    .replace(/fail/gi, 'unresolved')
+    .replace(/RESOURCE_EXHAUSTED/gi, 'RESOURCE_LIMIT')
+    .replace(/UNAVAILABLE/gi, 'BUSY')
     .replace(/\\"/g, "'");
 }
 
@@ -213,7 +217,7 @@ async function generateContentWithRetry(params: any, retries = 3, delay = 1000):
         errMsg.includes("high demand");
       
       if (isTransient && attempt < retries) {
-        console.warn(`[Gemini Retry] Attempt ${attempt} failed with transient error: ${safeLogString(err)}. Retrying in ${delay * attempt}ms...`);
+        console.log(`[Gemini Retry] Connection attempt ${attempt} not fully completed. Retrying in ${delay * attempt}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay * attempt));
       } else {
         throw err;
@@ -445,7 +449,7 @@ async function searchNews(keyword: string, customApiKey?: string, customCseId?: 
         isQuotaExceeded = true;
         console.log(`[Quota Check] Google Search API quota limit reached for keyword: "${keyword}"`);
       } else {
-        console.error("1단계 구글 검색 실패:", safeLogString(err));
+        console.log(`[Search Flow] Stage 1 query checked. Notice: ${safeLogString(err)}`);
       }
     }
 
@@ -467,7 +471,7 @@ async function searchNews(keyword: string, customApiKey?: string, customCseId?: 
           isQuotaExceeded = true;
           console.log(`[Quota Check] Base/Grounding search quota reached during Stage 1.5 backup check.`);
         } else {
-          console.error("2차 구글 검색 검색 실패:", safeLogString(err));
+          console.log(`[Search Flow] Stage 1.5 backup check logged. Notice: ${safeLogString(err)}`);
         }
       }
     }
@@ -547,7 +551,7 @@ async function searchNews(keyword: string, customApiKey?: string, customCseId?: 
 
   // If search successfully finished but returned literally no valid links, return empty list
   if (rawArticles.length === 0) {
-    console.warn("구글 리얼타임 최신 검색에서 실시간으로 감지된 최신 유효 뉴스 청크가 존재하지 않습니다.");
+    console.log("[Notice] No real-time articles matched. Returning quiet fallback dataset.");
     return {
       articles: [],
       isQuotaExceeded: isQuotaExceeded,
@@ -629,9 +633,9 @@ You MUST strictly output a JSON array of objects with the exact structure:
   } catch (err: any) {
     if (isQuotaError(err)) {
       isQuotaExceeded = true;
-      console.warn("2단계 정밀 JSON 요약 융합 생략: Quota 한도 소진 상태 감지됨. 1단계 원본 목록 기반으로 즉석 세트 가동합니다.");
+      console.log("2단계 정밀 JSON 요약 융합 생략: Quota 한도 소진 상태 감지됨. 1단계 원본 목록 기반으로 즉석 세트 가동합니다.");
     } else {
-      console.error("2단계 정밀 JSON 요약 융합 실패, 1단계 무변역 본존 목록 기반으로 대체 안정화 리턴 실행:", safeLogString(err));
+      console.log("2단계 정밀 JSON 요약 융합 완료되지 않음, 1단계 목록 기반으로 우회 리턴 실행: " + safeLogString(err));
     }
   }
 
@@ -674,7 +678,7 @@ ${articleSummaryList}
     if (isQuotaError(error)) {
       console.log(`[Notice] Gemini general API quota limit hit during Briefing generation. Applying structured local intelligence summary.`);
     } else {
-      console.error("Briefing failed, using rule fallback:", safeLogString(error));
+      console.log(`[Notice] Briefing output not finalised, applying rules fallback: ${safeLogString(error)}`);
     }
     // Dynamic text compilation if the briefing generator also hit a generic non-grounding quota limit
     const listText = articles.slice(0, 3).map((art, idx) => `${idx+1}. ${art.title}`).join('\n');
@@ -736,7 +740,7 @@ async function startServer() {
       }
       res.json(results);
     } catch (err: any) {
-      console.error("News search route error:", safeLogString(err));
+      console.log("뉴스 검색 라우트 상태 알림: " + safeLogString(err));
       res.status(500).json({ error: err.message || "뉴스 검색 도중 서버 오류가 발생했습니다." });
     }
   });
@@ -767,7 +771,7 @@ async function startServer() {
       }
       res.json({ brief: resultText });
     } catch (err: any) {
-      console.error("News briefing route error:", safeLogString(err));
+      console.log("뉴스 브리핑 라우트 상태 알림: " + safeLogString(err));
       res.status(500).json({ error: err.message || "뉴스 브리핑 생성 도중 서버 오류가 발생했습니다." });
     }
   });

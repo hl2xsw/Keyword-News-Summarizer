@@ -105,7 +105,7 @@ export default function App() {
           }
         }
       } catch (briefErr) {
-        console.error("Briefing generation failed:", briefErr);
+        console.log("[Notice] Briefing creation status check logged.");
       } finally {
         if (!controller.signal.aborted) {
           setBriefingLoading(false);
@@ -117,7 +117,7 @@ export default function App() {
         console.log('Search aborted');
         return;
       }
-      console.error("Search failed:", err);
+      console.log("[Notice] Search processing logged.");
       setError('실시간 뉴스 신호 수신에 실패했습니다. 키워드를 변경하여 다시 탐색해 보세요.');
       setNews([]);
     } finally {

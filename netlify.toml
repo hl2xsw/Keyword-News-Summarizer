@@ -9,20 +9,22 @@
 [build.environment]
   NPM_FLAGS = "--legacy-peer-deps"
 
+# --- Netlify Functions Redirects ---
+# Redirect internal frontend api calls directly to Netlify serverless functions
+[[redirects]]
+  from = "/api/news"
+  to = "/.netlify/functions/news"
+  status = 200
+
+[[redirects]]
+  from = "/api/brief"
+  to = "/.netlify/functions/brief"
+  status = 200
+
 # --- SPA Routing Rules ---
 # This rule tells Netlify to redirect all deep-links to index.html so the client-side router handles them (prevents 404 on refresh).
+# MUST be defined last to prevent catching custom serverless api endpoints!
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-# --- Option: Backend API Proxy (Optional) ---
-# If you deploy the backend Express server elsewhere (e.g. Render, Railway, Google Cloud Run), 
-# you can uncomment this block and replace the "to" URL with your deployed backend server's URL.
-# Netlify will then automatically and securely proxy all "/api/*" requests to your backend without any CORS errors.
-#
-# [[redirects]]
-#   from = "/api/*"
-#   to = "https://your-backend-api-server.com/api/:splat"
-#   status = 200
-#   force = true

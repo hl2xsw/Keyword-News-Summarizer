@@ -6,6 +6,9 @@
   command = "npm run build:client"
   publish = "dist"
 
+[build.environment]
+  NPM_FLAGS = "--legacy-peer-deps"
+
 # --- SPA Routing Rules ---
 # This rule tells Netlify to redirect all deep-links to index.html so the client-side router handles them (prevents 404 on refresh).
 [[redirects]]

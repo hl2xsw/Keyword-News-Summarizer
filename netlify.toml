@@ -1,0 +1,25 @@
+# Netlify Configuration file for News Research AI
+# This file automatically registers the correct build settings and redirects on Netlify.
+
+[build]
+  # Compile only the frontend client. This avoids Node.js Express/esbuild compilation issues on Netlify's build container.
+  command = "npm run build:client"
+  publish = "dist"
+
+# --- SPA Routing Rules ---
+# This rule tells Netlify to redirect all deep-links to index.html so the client-side router handles them (prevents 404 on refresh).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# --- Option: Backend API Proxy (Optional) ---
+# If you deploy the backend Express server elsewhere (e.g. Render, Railway, Google Cloud Run), 
+# you can uncomment this block and replace the "to" URL with your deployed backend server's URL.
+# Netlify will then automatically and securely proxy all "/api/*" requests to your backend without any CORS errors.
+#
+# [[redirects]]
+#   from = "/api/*"
+#   to = "https://your-backend-api-server.com/api/:splat"
+#   status = 200
+#   force = true

@@ -1,4 +1,4 @@
-# Netlify Configuration file for News Research AI
+# Netlify Configuration file for News Research AI (v1.0.1)
 # This file automatically registers the correct build settings and redirects on Netlify.
 
 [build]

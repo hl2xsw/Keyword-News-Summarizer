@@ -1,6 +1,7 @@
 {
   "name": "news-research-ai",
   "version": "0.1.0",
+  "description": "Keyword News Summarizer AI Web Application designed with robust dependency resolution for local and Netlify environments.",
   "private": true,
   "type": "module",
   "scripts": {

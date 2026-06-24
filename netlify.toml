@@ -13,7 +13,6 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["node-domexception"]
 
 # --- Netlify Functions Redirects ---
 # Redirect internal frontend api calls directly to Netlify serverless functions

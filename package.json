@@ -1,5 +1,5 @@
 {
-  "name": "News Research AI",
+  "name": "news-research-ai",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,11 +13,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "latest",
+    "@google/genai": "^2.10.0",
     "clsx": "^2.1.1",
     "express": "^5.2.1",
-    "framer-motion": "latest",
-    "lucide-react": "latest",
+    "framer-motion": "^12.41.0",
+    "lucide-react": "^1.21.0",
     "node-domexception": "^1.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

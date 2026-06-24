@@ -289,7 +289,7 @@ async function searchNewsRSS(keyword: string): Promise<{ url: string; title: str
         });
       }
       
-      if (results.length >= 10) {
+      if (results.length >= 20) {
         break;
       }
     }
@@ -560,7 +560,7 @@ You MUST strictly output a JSON array of objects with the exact structure:
             "Access-Control-Allow-Origin": "*"
           },
           body: JSON.stringify({
-            articles: verifiedArticles.slice(0, 15),
+            articles: verifiedArticles.slice(0, 20),
             isQuotaExceeded: false,
             isCustomCseFailed: isCustomCseFailed
           })
@@ -579,7 +579,7 @@ You MUST strictly output a JSON array of objects with the exact structure:
       url: art.url,
       source: art.source,
       publishedAt: currentPreciseTimeISO
-    })).slice(0, 15);
+    })).slice(0, 20);
 
     return {
       statusCode: 200,

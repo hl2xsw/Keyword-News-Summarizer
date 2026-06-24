@@ -519,49 +519,30 @@ export default function App() {
                         })}
                       </time>
                     </div>
-                    {/* Priority 2: Detail page transition on Title Click */}
-                    <button
-                      onClick={() => { setSelectedArticle(article); setSelectedArticleIndex(i); }}
+                    {/* Open original link on Title Click */}
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="block text-left hover:translate-x-1 transition-transform w-full group/title cursor-pointer"
                     >
-                      <h4 className="text-base font-bold leading-snug tracking-tight mb-4 text-slate-900 group-hover/title:text-blue-700 transition-colors">
+                      <h4 className="text-base font-bold leading-snug tracking-tight mb-2 text-slate-900 group-hover/title:text-blue-600 transition-colors">
                         {article.title || "제목 없음"}
                       </h4>
-                    </button>
+                    </a>
                   </header>
 
-                  {/* Snippet is also click-triggerable */}
-                  <div 
-                    onClick={() => { setSelectedArticle(article); setSelectedArticleIndex(i); }}
-                    className="cursor-pointer"
-                  >
-                    <p className="text-slate-500 text-sm leading-relaxed mb-8 font-medium line-clamp-3">
-                      {article.snippet}
-                    </p>
-                  </div>
-
-                  <div className="mt-auto pt-6 border-t border-slate-100">
-                    <div className="flex items-center gap-3">
-                      {/* Detailed View Button */}
-                      <button
-                        onClick={() => { setSelectedArticle(article); setSelectedArticleIndex(i); }}
-                        className="flex-1 min-h-[44px] px-6 rounded-xl text-[9px] font-black tracking-[0.2em] uppercase transition-all flex items-center justify-center gap-2 border-2 bg-white border-black text-black hover:bg-black hover:text-white hover:-translate-y-1 hover:shadow-lg hover:shadow-black/10"
-                      >
-                        <Newspaper size={12} />
-                        상세 요약 보기
-                      </button>
-                      
-                      {/* Direct original article URL */}
-                      <a 
-                        href={article.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-11 h-11 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 hover:bg-black hover:text-white transition-all hover:-translate-y-1 border border-black/5"
-                        title="원문 기사 바로보기"
-                      >
-                        <ArrowUpRight size={18} />
-                      </a>
-                    </div>
+                  <div className="mt-auto pt-4 border-t border-slate-100">
+                    <a 
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full min-h-[44px] px-6 rounded-xl text-xs font-black tracking-widest uppercase transition-all flex items-center justify-center gap-2 border-2 bg-black border-black text-white hover:bg-blue-600 hover:border-blue-600 hover:-translate-y-1 hover:shadow-lg hover:shadow-blue-600/20"
+                      title="원문 기사 바로보기"
+                    >
+                      <span>원문 바로가기</span>
+                      <ArrowUpRight size={14} />
+                    </a>
                   </div>
                 </div>
               </motion.article>

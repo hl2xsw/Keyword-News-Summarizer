@@ -305,7 +305,7 @@ async function searchNewsRSS(keyword: string): Promise<{ url: string; title: str
         });
       }
       
-      if (results.length >= 10) {
+      if (results.length >= 20) {
         break;
       }
     }
@@ -624,7 +624,7 @@ You MUST strictly output a JSON array of objects with the exact structure:
 
       if (verifiedArticles.length > 0) {
         return {
-          articles: verifiedArticles.slice(0, 15),
+          articles: verifiedArticles.slice(0, 20),
           isQuotaExceeded: false,
           isCustomCseFailed: isCustomCseFailed
         };
@@ -646,7 +646,7 @@ You MUST strictly output a JSON array of objects with the exact structure:
     url: art.url,
     source: art.source,
     publishedAt: currentPreciseTimeISO
-  })).slice(0, 15);
+  })).slice(0, 20);
 
   return {
     articles: fallbackResults,

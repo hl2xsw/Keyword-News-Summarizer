@@ -200,7 +200,7 @@ export default function App() {
              </button>
              <div className="h-4 w-px bg-slate-200 hidden sm:block" />
              <span className="text-[10px] font-bold text-slate-400 tabular-nums hidden sm:block">
-               v3.5.0_LIVE_UPGRADE
+               v3.5.1_LIVE_UPGRADE
              </span>
           </div>
         </div>

@@ -8,9 +8,8 @@
 
 [build.environment]
   NPM_FLAGS = "--legacy-peer-deps"
-  NETLIFY_USE_NPM_CI = "true"
-  NODE_VERSION = "22.14.0"
-  NPM_VERSION = "10.9.2"
+  NETLIFY_USE_NPM_CI = "false"
+  NODE_VERSION = "22"
 
 [functions]
   node_bundler = "esbuild"

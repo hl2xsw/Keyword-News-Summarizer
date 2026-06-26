@@ -1,3 +1,4 @@
+// news-research-ai v0.1.1 hotfix: Resolving Netlify Dependency Corepack installation issue
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Loader2, Newspaper, ExternalLink, Sparkles, RefreshCw, LayoutGrid, List, Info, ArrowUpRight, Zap, X, Settings, Eye, EyeOff, Save, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';

@@ -34,10 +34,10 @@ function isQuotaError(err: any): boolean {
   );
 }
 
-async function generateContentWithRetry(params: any, retries = 3, delay = 1000): Promise<any> {
+async function generateContentWithRetry(aiClient: GoogleGenAI, params: any, retries = 3, delay = 1000): Promise<any> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await ai.models.generateContent(params);
+      return await aiClient.models.generateContent(params);
     } catch (err: any) {
       const errMsg = String(err.message || "").toLowerCase();
       if (isQuotaError(err)) {
@@ -66,7 +66,7 @@ export const handler = async (event: any, context: any) => {
       statusCode: 204,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Headers": "Content-Type, X-Google-Api-Key",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
       },
       body: ""
@@ -103,9 +103,21 @@ export const handler = async (event: any, context: any) => {
       };
     }
 
+    const headers = event.headers || {};
+    const customApiKey = headers["x-google-api-key"] || headers["X-Google-Api-Key"];
+
+    const activeAi = customApiKey && customApiKey.trim() ? new GoogleGenAI({
+      apiKey: customApiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    }) : ai;
+
     try {
       const articleSummaryList = articles.slice(0, 8).map((art, idx) => `[${idx+1}] 제목: ${art.title} (출처: ${art.source})`).join('\n');
-      const response = await generateContentWithRetry({
+      const response = await generateContentWithRetry(activeAi, {
         model: "gemini-3.5-flash",
         contents: `당신은 수석 뉴스 분석가입니다. 다음 실시간 뉴스 검색 결과를 종합하여, 사용자가 지금 해당 이슈의 핵심 동향을 한눈에 파악할 수 있도록 '실시간 뉴스 브리핑 및 트렌드 분석'을 작성해 주세요.
         
@@ -129,9 +141,26 @@ ${articleSummaryList}
         body: JSON.stringify({ brief: response.text || "뉴스 브리핑 생성에 실패했습니다." })
       };
     } catch (error: any) {
-      // Fallback summary format if quota or connection error occurred
+      // Context-aware dynamic fallback generation using actual article titles
       const listText = articles.slice(0, 3).map((art, idx) => `${idx+1}. ${art.title}`).join('\n');
-      const fallbackBrief = `임시 인텔리전스 브리핑:\n현재 "${keyword}" 테마는 기술 격차 극복과 전략적 협업의 중심축에 놓여 있습니다.\n\n주요 전개:\n${listText}\n\n전망: 시장 유입 자금 및 주요 선도 기업들의 기술 주도권 실크로드가 내년 상반기 분기점이 될 전망입니다.`;
+      
+      const topArticles = articles.slice(0, 3);
+      const firstTitle = topArticles[0]?.title || "";
+      const secondTitle = topArticles[1]?.title || "";
+      
+      let coreIssue = `현재 "${keyword}" 관련 실시간 보도와 대중들의 논의가 주요 이슈로 부각되며 관련 트렌드가 큰 주목을 받고 있습니다.`;
+      if (firstTitle) {
+        const truncatedTitle = firstTitle.length > 50 ? `${firstTitle.substring(0, 47)}...` : firstTitle;
+        coreIssue = `현재 "${keyword}" 테마는 "${truncatedTitle}" 보도를 비롯한 다각적인 언론 관심사를 바탕으로 새로운 국면과 실시간 흐름을 형성해 가고 있습니다.`;
+      }
+
+      let prospect = `향후 시장의 판세와 관련 기관 및 이해관계자들의 적극적인 대응 방향에 따라 구체적인 장기 국면이 정립될 전망입니다.`;
+      if (secondTitle) {
+        const truncatedSecTitle = secondTitle.length > 45 ? `${secondTitle.substring(0, 42)}...` : secondTitle;
+        prospect = `앞으로 "${truncatedSecTitle}" 이슈의 추가 보도와 후속 조치의 귀추가 향후 국면을 판단할 중요한 포인트이자 주요 전망이 될 것입니다.`;
+      }
+
+      const fallbackBrief = `임시 인텔리전스 브리핑:\n${coreIssue}\n\n주요 전개:\n${listText}\n\n전망: ${prospect}`;
       
       return {
         statusCode: 200,

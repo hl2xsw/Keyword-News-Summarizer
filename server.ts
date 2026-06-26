@@ -655,11 +655,22 @@ You MUST strictly output a JSON array of objects with the exact structure:
   };
 }
 
-async function briefNews(keyword: string, articles: Article[]): Promise<string> {
+async function briefNews(keyword: string, articles: Article[], customApiKey?: string): Promise<string> {
   if (articles.length === 0) return "분석할 뉴스 기사가 없습니다.";
   try {
     const articleSummaryList = articles.slice(0, 8).map((art, idx) => `[${idx+1}] 제목: ${art.title} (출처: ${art.source})`).join('\n');
-    const response = await generateContentWithRetry({
+    
+    // Instantiate separate client if dynamic client key is provided
+    const activeAi = customApiKey && customApiKey.trim() ? new GoogleGenAI({
+      apiKey: customApiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    }) : ai;
+
+    const response = await activeAi.models.generateContent({
       model: "gemini-3.5-flash",
       contents: `당신은 수석 뉴스 분석가입니다. 다음 실시간 뉴스 검색 결과를 종합하여, 사용자가 지금 해당 이슈의 핵심 동향을 한눈에 파악할 수 있도록 '실시간 뉴스 브리핑 및 트렌드 분석'을 작성해 주세요.
       
@@ -680,9 +691,27 @@ ${articleSummaryList}
     } else {
       console.log(`[Notice] Briefing output not finalised, applying rules fallback: ${safeLogString(error)}`);
     }
-    // Dynamic text compilation if the briefing generator also hit a generic non-grounding quota limit
+    
+    // Context-aware dynamic fallback generation using actual article titles
     const listText = articles.slice(0, 3).map((art, idx) => `${idx+1}. ${art.title}`).join('\n');
-    return `임시 인텔리전스 브리핑:\n현재 "${keyword}" 테마는 기술 격차 극복과 전략적 협업의 중심축에 놓여 있습니다.\n\n주요 전개:\n${listText}\n\n전망: 시장 유입 자금 및 주요 선도 기업들의 기술 주도권 실크로드가 내년 상반기 분기점이 될 전망입니다.`;
+    
+    const topArticles = articles.slice(0, 3);
+    const firstTitle = topArticles[0]?.title || "";
+    const secondTitle = topArticles[1]?.title || "";
+    
+    let coreIssue = `현재 "${keyword}" 관련 실시간 보도와 대중들의 논의가 주요 이슈로 부각되며 관련 트렌드가 큰 주목을 받고 있습니다.`;
+    if (firstTitle) {
+      const truncatedTitle = firstTitle.length > 50 ? `${firstTitle.substring(0, 47)}...` : firstTitle;
+      coreIssue = `현재 "${keyword}" 테마는 "${truncatedTitle}" 보도를 비롯한 다각적인 언론 관심사를 바탕으로 새로운 국면과 실시간 흐름을 형성해 가고 있습니다.`;
+    }
+
+    let prospect = `향후 시장의 판세와 관련 기관 및 이해관계자들의 적극적인 대응 방향에 따라 구체적인 장기 국면이 정립될 전망입니다.`;
+    if (secondTitle) {
+      const truncatedSecTitle = secondTitle.length > 45 ? `${secondTitle.substring(0, 42)}...` : secondTitle;
+      prospect = `앞으로 "${truncatedSecTitle}" 이슈의 추가 보도와 후속 조치의 귀추가 향후 국면을 판단할 중요한 포인트이자 주요 전망이 될 것입니다.`;
+    }
+
+    return `임시 인텔리전스 브리핑:\n${coreIssue}\n\n주요 전개:\n${listText}\n\n전망: ${prospect}`;
   }
 }
 
@@ -747,12 +776,13 @@ async function startServer() {
 
   // API Route - News Briefing
   app.post("/api/brief", async (req, res) => {
-    const { keyword, articles } = req.body;
+    const { keyword, articles, customApiKey: bodyApiKey } = req.body;
     if (!keyword) {
       return res.status(400).json({ error: "검색어가 존재하지 않습니다." });
     }
 
-    const cacheKey = keyword.trim().toLowerCase();
+    const customApiKey = (req.headers["x-google-api-key"] as string) || bodyApiKey;
+    const cacheKey = `${keyword.trim().toLowerCase()}${customApiKey ? `_custom_${customApiKey.substring(0, 6)}` : ""}`;
     const cached = briefCache[cacheKey];
     const now = Date.now();
 
@@ -762,7 +792,7 @@ async function startServer() {
     }
 
     try {
-      const resultText = await briefNews(keyword, articles || []);
+      const resultText = await briefNews(keyword, articles || [], customApiKey);
       if (articles && articles.length > 0 && resultText) {
         briefCache[cacheKey] = {
           brief: resultText,

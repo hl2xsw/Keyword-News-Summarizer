@@ -147,11 +147,16 @@ export async function briefNews(keyword: string, articles: Article[]): Promise<s
   const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || "";
 
   try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (customApiKey) {
+      headers["X-Google-Api-Key"] = customApiKey;
+    }
+
     const response = await fetch(`${apiBase}/api/brief`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({ keyword, articles }),
     });
 

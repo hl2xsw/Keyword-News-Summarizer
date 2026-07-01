@@ -5,6 +5,7 @@
   # Compile only the frontend client. This avoids Node.js Express/esbuild compilation issues on Netlify's build container.
   command = "npm run build:client"
   publish = "dist"
+  functions = "netlify/functions"
 
 [build.environment]
   NPM_FLAGS = "--legacy-peer-deps"

@@ -13,6 +13,45 @@ const CATEGORIES = [
   { label: 'Culture', value: '글로벌 엔터테인먼트 및 문화 뉴스' }
 ];
 
+function formatDateSafely(dateStr: string | undefined): string {
+  if (!dateStr) return '실시간';
+  if (dateStr === '실시간') return '실시간';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) {
+      return dateStr;
+    }
+    return d.toLocaleDateString('ko-KR', { 
+      month: '2-digit', 
+      day: '2-digit', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+function formatDetailedDateSafely(dateStr: string | undefined): string {
+  if (!dateStr) return '실시간';
+  if (dateStr === '실시간') return '실시간';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) {
+      return dateStr;
+    }
+    return d.toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return dateStr;
+  }
+}
+
 export default function App() {
   const [keyword, setKeyword] = useState('');
   const [news, setNews] = useState<Article[]>([]);
@@ -512,12 +551,7 @@ export default function App() {
                         {article.source}
                       </span>
                       <time className="text-[9px] font-bold text-slate-400 tabular-nums font-mono">
-                        {new Date(article.publishedAt).toLocaleDateString('ko-KR', { 
-                          month: '2-digit', 
-                          day: '2-digit', 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
+                        {formatDateSafely(article.publishedAt)}
                       </time>
                     </div>
                     {/* Open original link on Title Click */}
@@ -620,13 +654,7 @@ export default function App() {
                     {selectedArticle.source}
                   </span>
                   <span className="text-[9px] font-black tracking-widest text-slate-400 font-mono">
-                    {new Date(selectedArticle.publishedAt).toLocaleString('ko-KR', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
+                    {formatDetailedDateSafely(selectedArticle.publishedAt)}
                   </span>
                 </div>
                 <button
